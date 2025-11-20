@@ -4,3 +4,22 @@ venv/
 
 # VSCode settings folder
 .vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Ignore Jupyter Notebook files
+*.ipynb
+.ipynb_checkpoints/
+
+# Ignore datasets & large folders
+PaHaW_organized/
+uploads/
+# trained_by_pyfile/
+# datasets/
+# data/
+# *.csv
+
+# Ignore local Flask templates
+templates/
