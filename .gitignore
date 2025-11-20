@@ -1,0 +1,6 @@
+# Environment folders
+env/
+venv/
+
+# VSCode settings folder
+.vscode/
