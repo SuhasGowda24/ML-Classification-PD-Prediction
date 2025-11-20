@@ -1,24 +1,24 @@
-# # Environment folders
-# env/
-# venv/
-# .venv/
+# Environment folders
+env/
+venv/
+.venv/
 
-# # VSCode settings folder
-# .vscode/
+# VSCode settings folder
+.vscode/
 
-# # Python cache
-# __pycache__/
-# *.pyc
+# Python cache
+__pycache__/
+*.pyc
 
-# # Ignore Jupyter Notebook files
-# *.ipynb
-# .ipynb_checkpoints/
+# Ignore Jupyter Notebook files
+*.ipynb
+.ipynb_checkpoints/
 
-# # Ignore datasets & large folders
-# PaHaW_organized/
-# uploads/
-# trained_by_pyfile/
-# *.csv
+# Ignore datasets & large folders
+PaHaW_organized/
+uploads/
+trained_by_pyfile/
+*.csv
 
-# # Ignore local Flask templates
-# templates/
+# Ignore local Flask templates
+templates/
