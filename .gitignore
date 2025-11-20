@@ -1,6 +1,7 @@
 # Environment folders
 env/
 venv/
+.venv/
 
 # VSCode settings folder
 .vscode/
@@ -16,10 +17,8 @@ __pycache__/
 # Ignore datasets & large folders
 PaHaW_organized/
 uploads/
-# trained_by_pyfile/
-# datasets/
-# data/
-# *.csv
+trained_by_pyfile/
+*.csv
 
 # Ignore local Flask templates
 templates/
