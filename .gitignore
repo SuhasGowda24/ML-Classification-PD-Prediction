@@ -17,8 +17,10 @@ __pycache__/
 # Ignore datasets & large folders
 PaHaW_organized/
 uploads/
-trained_by_pyfile/
 *.csv
+
+# Training artifacts
+trained_by_pyfile
 
 # Ignore local Flask templates
 templates/
