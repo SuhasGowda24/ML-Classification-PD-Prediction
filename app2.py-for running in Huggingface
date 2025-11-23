@@ -1,0 +1,229 @@
+import os
+import pandas as pd
+import numpy as np
+import joblib
+from flask import Flask, render_template, request, jsonify
+from huggingface_hub import hf_hub_download
+import json
+
+# Flask App
+app = Flask(__name__)
+app.config["UPLOAD_FOLDER"] = "uploads"
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+# Load Model from HuggingFace Repository
+model_path = hf_hub_download(
+    repo_id="suhassgowda/PD-Model-PKL",
+    filename="parkinsons_model.pkl"
+)
+
+model_pipeline = joblib.load(model_path)
+model_accuracy = 0.7417
+
+
+# Safe CSV reader (for uploaded .svc / stroke files)
+def safe_read_csv(file_path):
+    encodings = ["utf-8", "utf-16", "utf-16-le", "utf-16-be", "latin1"]
+    for enc in encodings:
+        try:
+            return pd.read_csv(file_path, header=None, skiprows=1, sep=" ", encoding=enc)
+        except:
+            continue
+    raise ValueError("Unsupported encoding or invalid stroke-data file")
+
+# Convert .svc file → features
+def calculate_features_from_file(file_path):
+    data = safe_read_csv(file_path)
+
+    data["time_diff"] = data[2].diff().fillna(0)
+    data["y_diff"] = data[0].diff().fillna(0)
+    data["x_diff"] = data[1].diff().fillna(0)
+    data["distance"] = np.sqrt(data["x_diff"]**2 + data["y_diff"]**2)
+    data["velocity"] = data["distance"] / data["time_diff"]
+    data["velocity"].replace([np.inf, -np.inf], 0, inplace=True)
+
+    data["velocity_diff"] = data["velocity"].diff().fillna(0)
+    data["acceleration"] = data["velocity_diff"] / data["time_diff"]
+    data["acceleration"].replace([np.inf, -np.inf], 0, inplace=True)
+
+    data["acceleration_diff"] = data["acceleration"].diff().fillna(0)
+    data["jerk"] = data["acceleration_diff"] / data["time_diff"]
+    data["jerk"].replace([np.inf, -np.inf], 0, inplace=True)
+
+    total_duration = data[2].iloc[-1] - data[2].iloc[0]
+    num_pen_lifts = (data[3] == 0).sum()
+
+    on_surface_time = data[data[3] == 1]["time_diff"].sum()
+    in_air_time = data[data[3] == 0]["time_diff"].sum()
+    ratio = in_air_time / on_surface_time if on_surface_time > 0 else 0
+
+    return {
+        "velocity_mean": data["velocity"].mean(),
+        "velocity_std": data["velocity"].std(),
+        "velocity_max": data["velocity"].max(),
+        "acceleration_mean": data["acceleration"].mean(),
+        "acceleration_std": data["acceleration"].std(),
+        "jerk_mean": data["jerk"].mean(),
+        "total_duration": total_duration,
+        "num_pen_lifts": num_pen_lifts,
+        "ratio_air_surface": ratio,
+        "pressure_mean": data[6].mean(),
+        "pressure_std": data[6].std(),
+        "pressure_max": data[6].max(),
+    }
+
+# Convert JSON strokes → features
+def calculate_features_from_json(strokes):
+    df = pd.DataFrame(strokes)
+
+    # Rename into numeric indices consistent with training dataset
+    df = df.rename(columns={
+        "y": 0,
+        "x": 1,
+        "time": 2,
+        "button": 3,
+        "pressure": 4 
+    })
+
+    # Convert button → numeric
+    df[3] = df[3].apply(lambda v: 1 if v == "Pressed" else 0)
+
+    # Compute time differences
+    df["time_diff"] = df[2].diff().fillna(0)
+    df["y_diff"] = df[0].diff().fillna(0)
+    df["x_diff"] = df[1].diff().fillna(0)
+
+    # Distance
+    df["distance"] = np.sqrt(df["x_diff"]**2 + df["y_diff"]**2)
+
+    # Velocity
+    df["velocity"] = df["distance"] / df["time_diff"]
+    df["velocity"] = df["velocity"].replace([np.inf, -np.inf], 0)
+
+    # Acceleration
+    df["velocity_diff"] = df["velocity"].diff().fillna(0)
+    df["acceleration"] = df["velocity_diff"] / df["time_diff"]
+    df["acceleration"] = df["acceleration"].replace([np.inf, -np.inf], 0)
+
+    # Jerk
+    df["acceleration_diff"] = df["acceleration"].diff().fillna(0)
+    df["jerk"] = df["acceleration_diff"] / df["time_diff"]
+    df["jerk"] = df["jerk"].replace([np.inf, -np.inf], 0)
+
+    # Duration
+    total_duration = df[2].iloc[-1] - df[2].iloc[0]
+
+    # Button lift count
+    num_pen_lifts = (df[3] == 0).sum()
+
+    # Air/surface time
+    on_surface_time = df[df[3] == 1]["time_diff"].sum()
+    in_air_time = df[df[3] == 0]["time_diff"].sum()
+    ratio = in_air_time / on_surface_time if on_surface_time > 0 else 0
+
+    return {
+        "velocity_mean": df["velocity"].mean(),
+        "velocity_std": df["velocity"].std(),
+        "velocity_max": df["velocity"].max(),
+        "acceleration_mean": df["acceleration"].mean(),
+        "acceleration_std": df["acceleration"].std(),
+        "jerk_mean": df["jerk"].mean(),
+        "total_duration": total_duration,
+        "num_pen_lifts": num_pen_lifts,
+        "ratio_air_surface": ratio,
+        "pressure_mean": df[4].mean(),
+        "pressure_std": df[4].std(),
+        "pressure_max": df[4].max()
+    }
+
+# Web UI Route (Handles SVC Upload)
+@app.route("/", methods=["GET", "POST"])
+def index():
+    prediction = None
+    prediction_accuracy = None
+    message_prefix = "The model predicts that the patient is likely"
+
+    if request.method == "POST":
+        if "svc_file" not in request.files:
+            return "No file uploaded", 400
+
+        svc_file = request.files["svc_file"]
+        task_type = request.form["task_type"]
+
+        if svc_file.filename == "":
+            return "Empty file not allowed", 400
+
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], svc_file.filename)
+        svc_file.save(file_path)
+
+        features = calculate_features_from_file(file_path)
+        features["task_type"] = task_type
+
+        df = pd.DataFrame([features])
+
+        predicted_proba = model_pipeline.predict_proba(df)[0]
+        predicted_label = model_pipeline.predict(df)[0]
+
+        prediction_accuracy = predicted_proba[predicted_label]
+
+        prediction = (
+            "Positive for Parkinson's Disease" if predicted_label == 1
+            else "Negative for Parkinson's Disease"
+        )
+
+        message_prefix = "The model is" if predicted_label == 1 else "The patient is likely"
+
+        os.remove(file_path)
+
+    return render_template(
+        "index.html",
+        prediction=prediction,
+        accuracy=model_accuracy,
+        prediction_accuracy=prediction_accuracy,
+        message_prefix=message_prefix
+    )
+
+# JSON API route for your React frontend
+@app.route("/analyse", methods=["POST"])
+def api_analyse():
+    data = request.get_json(force=True)
+
+    strokes = data.get("strokes", [])
+    task_type = data.get("taskType", data.get("task_type", "default"))
+
+    # Basic validation
+    if not isinstance(strokes, list) or len(strokes) < 3:
+        return jsonify({"error": "Invalid strokes"}), 400
+    
+     # Extract features
+    features = calculate_features_from_json(strokes)
+    #  REQUIRED FOR THE MODEL 
+    features["task_type"] = task_type
+
+    df = pd.DataFrame([features])
+
+   # Ensure all required model columns exist without overwriting real values
+    for col in model_pipeline.feature_names_in_:
+        if col not in df.columns:
+            if col == "task_type":
+                df[col] = task_type
+            else:
+                df[col] = 0 # default value for missing numeric columns
+
+    pred_label = int(model_pipeline.predict(df)[0])
+    conf = float(model_pipeline.predict_proba(df)[0][pred_label])
+
+    return jsonify({
+        "prediction": pred_label,
+        "confidence": conf,
+        "message": "Positive for PD" if pred_label == 1 else "Negative for PD"
+    })
+
+
+@app.route("/status")
+def status():
+    return jsonify({"status": "API is running"})
+
+# Run
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=7860, debug=True)

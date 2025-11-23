@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Parkinson's Prediction</title>
+</head>
+<body>
+    <h1>Parkinson's Prediction</h1>
+    
+    <p>This model predicts Parkinson's disease based on handwriting features.</p>
+
+    <h2>Model Performance</h2>
+    <p>The Random Forest model has an overall accuracy of <b>{{ accuracy }}</b>.</p>
+    
+    <hr>
+    
+    <h2>Make a Prediction</h2>
+    <form method="POST" enctype="multipart/form-data">
+        <div>
+            <label for="svc_file">Upload .svc file:</label>
+            <input type="file" name="svc_file" required>
+        </div>
+        <br>
+        <div>
+            <label for="task_type">Select Task Type:</label>
+            <select name="task_type" required>
+                <option value="">--Select Task Type--</option>
+                <option value="spiral">spiral</option>
+                <option value="l_char">l_char</option>
+                <option value="le_char">le_char</option>
+                <option value="les">les</option>
+                <option value="lektorka">lektorka</option>
+                <option value="porovnal">porovnal</option>
+                <option value="nepopadnout">nepopadnout</option>
+                <option value="Tramvaj">Tramvaj</option>
+            </select>
+        </div>
+        <br>
+        <button type="submit">Predict</button>
+    </form>
+    
+    {% if prediction %}
+        <hr>
+        <h2>Prediction Result</h2>
+        <p><strong>{{ message_prefix }} {{ prediction }}</strong> with a confidence score of <strong>{{ "%.2f"|format(prediction_accuracy) }}</strong>.</p>
+    {% endif %}
+</body>
+</html>

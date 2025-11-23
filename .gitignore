@@ -23,4 +23,7 @@ uploads/
 trained_by_pyfile
 
 # Ignore local Flask templates
-templates/
+# templates/
+
+parkinsons_model.pkl
+

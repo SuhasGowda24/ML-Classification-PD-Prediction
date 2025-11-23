@@ -31,30 +31,32 @@ def calculate_features(file_path):
     data['time_diff'] = data[2].diff().fillna(0)
     data['y_diff'] = data[0].diff().fillna(0)
     data['x_diff'] = data[1].diff().fillna(0)
-    data['distance'] = np.sqrt(data['x_diff']**2 + data['y_diff']**2)
-    data['velocity'] = data['distance'] / data['time_diff']
+    data['distance'] = np.sqrt(data['x_diff']**2 + data['y_diff']**2) # distance = √(dx² + dy²)
+    data['velocity'] = data['distance'] / data['time_diff']  # Velocity describes speed of writing. PD patients have: slower movement, inconsistent speed
     data['velocity'].replace([np.inf, -np.inf], 0, inplace=True)
     #time_diff, y_diff, x_diff, distance, velocity
 
     #convertion
     data['velocity_diff'] = data['velocity'].diff().fillna(0)
-    data['acceleration'] = data['velocity_diff'] / data['time_diff']
-    data['acceleration'].replace([np.inf, -np.inf], 0, inplace=True)
+    data['acceleration'] = data['velocity_diff'] / data['time_diff'] # acceleration = diff(velocity) / time_diff
+    data['acceleration'].replace([np.inf, -np.inf], 0, inplace=True) # Acceleration captures movement smoothness. PD often → irregular acceleration.
     data['acceleration_diff'] = data['acceleration'].diff().fillna(0)
-    data['jerk'] = data['acceleration_diff'] / data['time_diff']
-    data['jerk'].replace([np.inf, -np.inf], 0, inplace=True)
+    data['jerk'] = data['acceleration_diff'] / data['time_diff'] # jerk = diff(acceleration) / time_diff
+    data['jerk'].replace([np.inf, -np.inf], 0, inplace=True) # Jerk = sudden changes in movement. PD patients have higher jerkiness due to tremor.
     total_duration = data[2].iloc[-1] - data[2].iloc[0]
-    num_pen_lifts = (data[3] == 0).sum()
-
+    num_pen_lifts = (data[3] == 0).sum() # Pen lifts capture hesitations & motor difficulty.
+    
+    #buttonState
     on_surface_time = data[data[3] == 1]['time_diff'].sum()
-    in_air_time = data[data[3] == 0]['time_diff'].sum()
+    in_air_time = data[data[3] == 0]['time_diff'].sum() # PD patients often spend more time: stopping, lifting pen, thinking before next stroke
     
     if on_surface_time > 0:
         ratio_air_surface = in_air_time / on_surface_time
     else:
         ratio_air_surface = 0.0
-
-    pressure_mean = data[6].mean()
+    
+    #pressure
+    pressure_mean = data[6].mean() # PD patients often have: weaker grip, fluctuating pressure
     pressure_std = data[6].std()
     pressure_max = data[6].max()
 
